@@ -51,24 +51,10 @@ plot_topic_distribution(model, type = "prevalence")
 plot_topic_distribution_interactive(model, type = "prevalence")
 
 
+
 optimal_topics <- search_optimal_topics(sample_data$dtm, sample_data$covariates, K_seq = 2:10)
 
 ```
-
-## Open Source License
-
-This project is distributed under the MIT License, a permissive open source license that allows reuse with minimal restrictions
-while requiring attribution and preservation of the license notice.
-
-### Common Open Source Licenses
-
-Below are several of the most widely adopted open source licenses:
-
-- **MIT License** – Simple and permissive, commonly used for libraries and applications.
-- **Apache License 2.0** – Permissive license with explicit patent grants and contribution terms.
-- **GNU General Public License v3.0 (GPLv3)** – Strong copyleft license ensuring derivative works remain open source.
-- **BSD 3-Clause License** – Permissive license similar to MIT with an explicit non-endorsement clause.
-- **Mozilla Public License 2.0 (MPL 2.0)** – File-level copyleft license that balances openness with flexibility.
 
 ### MIT License
 
