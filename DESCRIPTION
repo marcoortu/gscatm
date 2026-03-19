@@ -1,0 +1,28 @@
+Package: gscatm
+Type: Package
+Title: gscatm
+Version: 0.1.0
+Author: Marco Ortu  
+Maintainer: Marco Ortu <marco.ortu@unica.it>
+Description: Integration of Generalized Structured Component Analysis (GSCA) with topic modeling to allow topics to vary across covariates.
+License: GPL-3
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+LazyData: true
+Depends: R (>= 3.5.0)
+Imports:
+    Matrix (>= 1.5-0),
+    MCMCpack,
+    stats,
+    utils,
+    ggplot2,
+    dplyr,
+    plotly
+Suggests:
+    clue,
+    quanteda,
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr

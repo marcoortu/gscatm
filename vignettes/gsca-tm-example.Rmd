@@ -1,0 +1,11 @@
+---
+title: "Getting Started with GSCA Topic Models"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with GSCA Topic Models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup}
+library(gscatm)
