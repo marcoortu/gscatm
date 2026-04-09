@@ -31,7 +31,7 @@ devtools::load_all(pkg_root)
 # Install the package so workers can use library(gscatm) without devtools
 # This avoids 22+ workers all doing devtools::load_all() on the same directory
 cat("Installing gscatm for parallel workers...\n")
-devtools::install(pkg_root, upgrade = "never", quiet = TRUE)
+devtools::install(pkg_root, upgrade = FALSE, quiet = TRUE)
 
 # ---- Parallelization setup ----
 n_cores <- parallel::detectCores() - 1L   # leave 1 core free
