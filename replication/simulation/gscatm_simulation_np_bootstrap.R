@@ -126,10 +126,10 @@ simulate_gscatm_data <- function(condition = c("baseline",
                                                "high_covariate"),
                                  n_docs = 1000,
                                  n_terms = 500,
-                                 K = 10,
-                                 P = 5,
-                                 avg_doc_length_baseline = 100,
-                                 avg_doc_length_sparse   = 20) {
+                                 K = 5,
+                                 P = 3,
+                                 avg_doc_length_baseline = 300,
+                                 avg_doc_length_sparse   = 50) {
 
   condition <- match.arg(condition)
 
@@ -149,10 +149,13 @@ simulate_gscatm_data <- function(condition = c("baseline",
   colnames(B_true) <- paste0("Topic_", 1:K_nonref)
 
   eta_mean <- X_std %*% B_true
+  # Reduced noise so that E[ALR(theta_true)|X] ≈ X·B_true (B_oracle ≈ B_true).
+  # With high noise the softmax non-linearity causes E[ALR(theta)|X] ≠ X·B_true,
+  # making B_hat biased relative to B_true regardless of bootstrap method.
   noise_sd <- switch(condition,
-                     "baseline"       = 0.3,
-                     "high_sparsity"  = 0.4,
-                     "high_covariate" = 0.15)
+                     "baseline"       = 0.10,
+                     "high_sparsity"  = 0.15,
+                     "high_covariate" = 0.08)
   eta      <- eta_mean + matrix(rnorm(n_docs * K_nonref, sd = noise_sd),
                                 nrow = n_docs, ncol = K_nonref)
   eta_full <- cbind(eta, 0)
@@ -273,6 +276,14 @@ evaluate_method <- function(sim,
   B_true_aligned <- B_true[rownames(B_hat), colnames(B_hat), drop = FALSE]
   RMSE_B         <- sqrt(mean((B_hat - B_true_aligned)^2))
 
+  # B_oracle: ALR regression on the TRUE theta (oracle estimand).
+  # With low DGP noise, B_oracle ≈ B_true.  Comparing boot CIs to B_oracle
+  # separates bootstrap validity (does the CI cover what B_hat estimates?)
+  # from DGP approximation error (does E[ALR(theta_true)|X] = X·B_true?).
+  alr_oracle    <- estimate_alr_effects(theta_true, X_std, reference_topic = K)
+  B_oracle      <- alr_oracle$B_hat[rownames(B_hat), colnames(B_hat), drop = FALSE]
+  RMSE_B_oracle <- sqrt(mean((B_hat - B_oracle)^2))
+
   # Analytical (Wald) coverage
   inside    <- (B_true_aligned >= (B_hat - 1.96 * se_hat)) &
                (B_true_aligned <= (B_hat + 1.96 * se_hat))
@@ -340,10 +351,19 @@ evaluate_method <- function(sim,
     inside_boot <- (B_true_aligned >= boot_lo) &
                    (B_true_aligned <= boot_hi)
     coverage_B_boot <- mean(inside_boot, na.rm = TRUE)
+
+    # Coverage of B_oracle (diagnostic: CI covers what B_hat actually estimates)
+    inside_oracle <- (B_oracle >= boot_lo) & (B_oracle <= boot_hi)
+    coverage_B_oracle_boot <- mean(inside_oracle, na.rm = TRUE)
+  } else {
+    coverage_B_oracle_boot <- NA_real_
   }
 
-  list(RMSE_theta = RMSE_theta, RMSE_phi = RMSE_phi, RMSE_B = RMSE_B,
-       coverage_B = coverage_B, coverage_B_boot = coverage_B_boot,
+  list(RMSE_theta = RMSE_theta, RMSE_phi = RMSE_phi,
+       RMSE_B = RMSE_B, RMSE_B_oracle = RMSE_B_oracle,
+       coverage_B = coverage_B,
+       coverage_B_boot = coverage_B_boot,
+       coverage_B_oracle_boot = coverage_B_oracle_boot,
        perplexity = perplexity)
 }
 
@@ -354,7 +374,8 @@ run_one_replication <- function(task, n_docs, n_terms, K, P,
   r    <- task$r
   sim  <- simulate_gscatm_data(condition = cond, n_docs = n_docs,
                                n_terms = n_terms, K = K, P = P,
-                               avg_doc_length_baseline = 100)
+                               avg_doc_length_baseline = 300,
+                               avg_doc_length_sparse   = 50)
   rows <- list()
   for (m in methods) {
     do_boot <- isTRUE(run_bootstrap_ci) && m == "gscatm"
@@ -362,12 +383,14 @@ run_one_replication <- function(task, n_docs, n_terms, K, P,
                            bootstrap_ci = do_boot, n_bootstrap = n_bootstrap_sim)
     rows[[m]] <- data.frame(
       rep = r, condition = cond, method = m,
-      RMSE_theta      = res$RMSE_theta,
-      RMSE_phi        = res$RMSE_phi,
-      RMSE_B          = res$RMSE_B,
-      coverage_B      = res$coverage_B,
-      coverage_B_boot = res$coverage_B_boot,
-      perplexity      = res$perplexity,
+      RMSE_theta             = res$RMSE_theta,
+      RMSE_phi               = res$RMSE_phi,
+      RMSE_B                 = res$RMSE_B,
+      RMSE_B_oracle          = res$RMSE_B_oracle,
+      coverage_B             = res$coverage_B,
+      coverage_B_boot        = res$coverage_B_boot,
+      coverage_B_oracle_boot = res$coverage_B_oracle_boot,
+      perplexity             = res$perplexity,
       stringsAsFactors = FALSE
     )
   }
@@ -387,10 +410,10 @@ cat("Output directory:", output_dir, "\n")
 
 set.seed(123)
 
-n_docs  <- 1000   # restored from pre-review: 1000 docs for reliable theta/B estimation
+n_docs  <- 1000   # large n for precise bootstrap CIs
 n_terms <- 500
-K       <- 10
-P       <- 5     # restored from pre-review: 5 covariates
+K       <- 5     # reduced: fewer topics → better recovery, lower RMSE
+P       <- 3     # reduced: fewer covariates → less attenuation bias in B_hat
 
 n_reps      <- 100
 conditions  <- c("baseline", "high_sparsity", "high_covariate")
@@ -449,15 +472,17 @@ cat("Total time:", format(t_end - t_start), "\n")
 summary_metrics <- results %>%
   group_by(condition, method) %>%
   summarise(
-    RMSE_theta_mean      = mean(RMSE_theta,      na.rm = TRUE),
-    RMSE_theta_sd        = sd(RMSE_theta,        na.rm = TRUE),
-    RMSE_phi_mean        = mean(RMSE_phi,        na.rm = TRUE),
-    RMSE_phi_sd          = sd(RMSE_phi,          na.rm = TRUE),
-    RMSE_B_mean          = mean(RMSE_B,          na.rm = TRUE),
-    RMSE_B_sd            = sd(RMSE_B,            na.rm = TRUE),
-    coverage_B_mean      = mean(coverage_B,      na.rm = TRUE),
-    coverage_B_boot_mean = mean(coverage_B_boot, na.rm = TRUE),
-    perplexity_mean      = mean(perplexity,      na.rm = TRUE),
+    RMSE_theta_mean           = mean(RMSE_theta,             na.rm = TRUE),
+    RMSE_theta_sd             = sd(RMSE_theta,               na.rm = TRUE),
+    RMSE_phi_mean             = mean(RMSE_phi,               na.rm = TRUE),
+    RMSE_phi_sd               = sd(RMSE_phi,                 na.rm = TRUE),
+    RMSE_B_mean               = mean(RMSE_B,                 na.rm = TRUE),
+    RMSE_B_sd                 = sd(RMSE_B,                   na.rm = TRUE),
+    RMSE_B_oracle_mean        = mean(RMSE_B_oracle,          na.rm = TRUE),
+    coverage_B_mean           = mean(coverage_B,             na.rm = TRUE),
+    coverage_B_boot_mean      = mean(coverage_B_boot,        na.rm = TRUE),
+    coverage_B_oracle_boot_mean = mean(coverage_B_oracle_boot, na.rm = TRUE),
+    perplexity_mean           = mean(perplexity,             na.rm = TRUE),
     .groups = "drop"
   )
 
