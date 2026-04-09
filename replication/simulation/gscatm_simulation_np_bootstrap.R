@@ -374,6 +374,15 @@ run_one_replication <- function(task, n_docs, n_terms, K, P,
   do.call(rbind, rows)
 }
 
+# ---- Output directory ----
+
+output_dir <- normalizePath(
+  file.path(pkg_root, "replication", "simulation", "output", "non_parametric_sims"),
+  mustWork = FALSE
+)
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+cat("Output directory:", output_dir, "\n")
+
 # ---- Main simulation loop (PARALLEL) ----
 
 set.seed(123)
@@ -459,36 +468,64 @@ print(
   include.rownames = FALSE
 )
 
+# ---- Save results ----
+
+saveRDS(results,         file.path(output_dir, "results.rds"))
+saveRDS(summary_metrics, file.path(output_dir, "summary_metrics.rds"))
+write.csv(results,         file.path(output_dir, "results.csv"),         row.names = FALSE)
+write.csv(summary_metrics, file.path(output_dir, "summary_metrics.csv"), row.names = FALSE)
+
+latex_file <- file.path(output_dir, "summary_table.tex")
+sink(latex_file)
+print(xtable(summary_metrics, digits = digits_vec), include.rownames = FALSE)
+sink()
+
+cat("Results saved to:", output_dir, "\n")
+
 # ---- Plots ----
 
-ggplot(results, aes(x = method, y = RMSE_theta)) +
+p_rmse_theta <- ggplot(results, aes(x = method, y = RMSE_theta)) +
   geom_boxplot() +
   facet_wrap(~ condition, scales = "free_y") +
   theme_bw() +
   labs(title = "RMSE theta by method and condition")
 
-ggplot(results, aes(x = method, y = RMSE_B)) +
+p_rmse_B <- ggplot(results, aes(x = method, y = RMSE_B)) +
   geom_boxplot() +
   facet_wrap(~ condition, scales = "free_y") +
   theme_bw() +
   labs(title = "RMSE B (covariate effects) by method and condition")
 
-ggplot(results, aes(x = method, y = coverage_B)) +
+p_coverage <- ggplot(results, aes(x = method, y = coverage_B)) +
   geom_boxplot() +
   facet_wrap(~ condition) +
   geom_hline(yintercept = 0.95, linetype = "dashed", color = "red") +
   theme_bw() +
   labs(title = "Analytical (Wald) coverage of B_true")
 
-ggplot(results %>% filter(method == "gscatm"),
+p_coverage_boot <- ggplot(results %>% filter(method == "gscatm"),
        aes(x = condition, y = coverage_B_boot)) +
   geom_boxplot() +
   geom_hline(yintercept = 0.95, linetype = "dashed", color = "red") +
   theme_bw() +
   labs(title = "Non-parametric bootstrap coverage for GSCATM (target = 0.95)")
 
-ggplot(results, aes(x = method, y = perplexity)) +
+p_perplexity <- ggplot(results, aes(x = method, y = perplexity)) +
   geom_boxplot() +
   facet_wrap(~ condition, scales = "free_y") +
   theme_bw() +
   labs(title = "Perplexity by method and condition")
+
+print(p_rmse_theta)
+print(p_rmse_B)
+print(p_coverage)
+print(p_coverage_boot)
+print(p_perplexity)
+
+ggsave(file.path(output_dir, "rmse_theta.pdf"),    p_rmse_theta,    width = 9, height = 4)
+ggsave(file.path(output_dir, "rmse_B.pdf"),        p_rmse_B,        width = 9, height = 4)
+ggsave(file.path(output_dir, "coverage_B.pdf"),    p_coverage,      width = 9, height = 4)
+ggsave(file.path(output_dir, "coverage_boot.pdf"), p_coverage_boot, width = 7, height = 4)
+ggsave(file.path(output_dir, "perplexity.pdf"),    p_perplexity,    width = 9, height = 4)
+
+cat("Plots saved to:", output_dir, "\n")
